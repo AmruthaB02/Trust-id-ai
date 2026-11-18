@@ -2,7 +2,6 @@
 
 TrustID AI is a college-demonstration application for educational certificate submission and verification.
 
-## Included in this ZIP
 
 - React + Vite frontend with login, registration and role-based dashboards.
 - Django REST Framework backend with SQLite.
