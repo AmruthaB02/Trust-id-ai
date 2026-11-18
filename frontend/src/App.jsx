@@ -10,6 +10,7 @@ import EmployerDashboard from "./pages/EmployerDashboard";
 import VerifyPortal from "./pages/VerifyPortal";
 import VerificationPage from "./pages/VerificationPage";
 import Reports from "./pages/Reports";
+import Profile from "./pages/Profile";
 
 function UserPage({Component,roles}) {
   const {user}=useAuth();
@@ -27,6 +28,7 @@ export default function App(){
   <Route path="/verify" element={<UserPage Component={VerifyPortal} roles={["employer", "university_admin", "student"]} />}/>
   <Route path="/verify/:reference" element={<VerificationPage/>}/>
   <Route path="/reports" element={<UserPage Component={Reports} roles={["student","university_admin","employer"]}/>}/>
+  <Route path="/profile" element={<ProtectedRoute><Profile/></ProtectedRoute>}/>
   <Route path="*" element={<Navigate to="/dashboard" replace/>}/>
  </Routes>;
 }

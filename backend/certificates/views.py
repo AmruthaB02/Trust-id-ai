@@ -141,10 +141,59 @@ class PublicVerificationView(APIView):
     permission_classes = [permissions.AllowAny]
 
     def get(self, request, reference):
+        ref_clean = str(reference).strip()
+        item = None
+
+        # 1. Try matching by UUID reference
         try:
-            item = CertificateSubmission.objects.get(reference=reference)
-        except CertificateSubmission.DoesNotExist:
-            return Response({"detail": "No verification record was found for this reference."}, status=404)
+            import uuid
+            uuid_obj = uuid.UUID(ref_clean)
+            item = CertificateSubmission.objects.filter(reference=uuid_obj).first()
+        except (ValueError, TypeError):
+            pass
+
+        # 2. Try matching by SHA-256 certificate hash
+        if not item:
+            item = CertificateSubmission.objects.filter(certificate_hash__iexact=ref_clean).first()
+
+        # 3. Try matching by Registration / Roll Number
+        if not item:
+            item = CertificateSubmission.objects.filter(registration_number__iexact=ref_clean).first()
+
+        # 4. If not found in student submissions, check the AuthorizedCertificate registry
+        if not item:
+            auth_rec = (
+                AuthorizedCertificate.objects.filter(certificate_hash__iexact=ref_clean).first()
+                or AuthorizedCertificate.objects.filter(registration_number__iexact=ref_clean).first()
+            )
+            if auth_rec:
+                file_url = request.build_absolute_uri(auth_rec.certificate_file.url) if auth_rec.certificate_file else None
+                return Response({
+                    "reference": auth_rec.registration_number,
+                    "status": "verified_demo",
+                    "student_name": auth_rec.student_name,
+                    "registration_number": auth_rec.registration_number,
+                    "degree": auth_rec.degree,
+                    "university_name": auth_rec.university_name,
+                    "marks": auth_rec.marks or None,
+                    "graduation_year": auth_rec.graduation_year,
+                    "certificate_hash": auth_rec.certificate_hash,
+                    "document_verified": bool(auth_rec.certificate_file),
+                    "verification_score": 100 if auth_rec.certificate_file else 95,
+                    "document_analysis": (
+                        "Institutional Ground Truth Record: Authenticated directly from authorized university database registry.\n"
+                        f"Master Document Hash: {auth_rec.certificate_hash or 'Registered in ledger'}"
+                    ),
+                    "qr_code_url": None,
+                    "file_url": file_url,
+                    "blockchain_tx_hash": None,
+                    "created_at": auth_rec.created_at,
+                    "review_note": "Record verified directly from authorized institutional registry.",
+                    "verification_type": "authorized_registry_match",
+                })
+
+        if not item:
+            return Response({"detail": f"No verification record found for '{ref_clean}'."}, status=404)
 
         qr_url = request.build_absolute_uri(item.qr_code.url) if item.qr_code else None
         file_url = request.build_absolute_uri(item.file.url) if item.file else None

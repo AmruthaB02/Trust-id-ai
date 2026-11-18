@@ -44,6 +44,48 @@ class RegisterSerializer(serializers.ModelSerializer):
         return user
 
 class ProfileSerializer(serializers.ModelSerializer):
+    current_password = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    new_password = serializers.CharField(write_only=True, required=False, allow_blank=True, min_length=6)
+
     class Meta:
         model = User
-        fields = ("id", "email", "username", "full_name", "role", "university_name", "company_name")
+        fields = (
+            "id", "email", "username", "full_name", "role",
+            "university_name", "company_name", "current_password", "new_password"
+        )
+        read_only_fields = ("id", "role")
+
+    def validate_email(self, value):
+        val = (value or "").strip().lower()
+        if not val:
+            raise serializers.ValidationError("Email cannot be blank.")
+        user = self.instance
+        if user and User.objects.filter(email__iexact=val).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError("This email is already registered to another account.")
+        return val
+
+    def validate_username(self, value):
+        val = (value or "").strip()
+        if not val:
+            raise serializers.ValidationError("Username cannot be blank.")
+        user = self.instance
+        if user and User.objects.filter(username__iexact=val).exclude(pk=user.pk).exists():
+            raise serializers.ValidationError("This username is already taken.")
+        return val
+
+    def update(self, instance, validated_data):
+        current_password = validated_data.pop("current_password", None)
+        new_password = validated_data.pop("new_password", None)
+
+        if new_password:
+            if not current_password:
+                raise serializers.ValidationError({"current_password": "Current password is required to set a new password."})
+            if not instance.check_password(current_password):
+                raise serializers.ValidationError({"current_password": "Current password is incorrect."})
+            instance.set_password(new_password)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+
+        instance.save()
+        return instance

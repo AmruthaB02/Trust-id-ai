@@ -1,5 +1,5 @@
-import { NavLink, useNavigate } from "react-router-dom";
-import { ShieldCheck, LayoutDashboard, UploadCloud, Building2, SearchCheck, BarChart3, LogOut, CheckCircle2 } from "lucide-react";
+import { NavLink, Link, useNavigate } from "react-router-dom";
+import { ShieldCheck, LayoutDashboard, UploadCloud, Building2, SearchCheck, BarChart3, LogOut, CheckCircle2, User } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 export default function DashboardLayout({ children, user }) {
@@ -12,6 +12,7 @@ export default function DashboardLayout({ children, user }) {
     { to: "/university/records", label: "Authorized records", icon: Building2, roles: ["university_admin"] },
     { to: "/verify", label: "Verify certificate", icon: SearchCheck, roles: ["student", "university_admin", "employer"] },
     { to: "/reports", label: "Reports & analytics", icon: BarChart3, roles: ["student", "university_admin", "employer"] },
+    { to: "/profile", label: "My Profile", icon: User, roles: ["student", "university_admin", "employer"] },
   ];
 
   const roleLabel =
@@ -77,7 +78,12 @@ export default function DashboardLayout({ children, user }) {
             <span>TRUSTID SECURE ENVIRONMENT</span>
             <strong>{orgName ? `${orgName} · ${roleLabel}` : roleLabel}</strong>
           </div>
-          <div className="profile-area">
+          <Link
+            to="/profile"
+            className="profile-area"
+            style={{ textDecoration: "none", color: "inherit", cursor: "pointer" }}
+            title="Click to view and edit your profile details"
+          >
             <div className="profile-avatar">
               {(user?.full_name || user?.username || user?.email || "U").slice(0, 1).toUpperCase()}
             </div>
@@ -85,7 +91,7 @@ export default function DashboardLayout({ children, user }) {
               <strong>{user?.full_name || user?.username || user?.email}</strong>
               <span>{user?.email}</span>
             </div>
-          </div>
+          </Link>
         </header>
 
         <div className="dashboard-content">{children}</div>
