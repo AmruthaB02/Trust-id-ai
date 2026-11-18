@@ -1,0 +1,9 @@
+import {useState} from "react";
+import {useNavigate} from "react-router-dom";
+import {Search,ShieldCheck,ArrowRight} from "lucide-react";
+import DashboardLayout from "../components/DashboardLayout";
+export default function EmployerDashboard({user}){
+ const [reference,setReference]=useState("");const [error,setError]=useState("");const navigate=useNavigate();
+ function submit(e){e.preventDefault();setError("");let value=reference.trim();if(!value){setError("Enter a verification reference or URL.");return;}try{if(value.startsWith("http://")||value.startsWith("https://")){const url=new URL(value);value=url.pathname.split("/").filter(Boolean).pop();}navigate(`/verify/${encodeURIComponent(value)}`);}catch{setError("Enter a valid verification reference or URL.");}}
+ return <DashboardLayout user={user}><div className="welcome-row"><div><span className="eyebrow">EMPLOYER WORKSPACE</span><h1>Credential verification</h1><p>Check a candidate's credential using its verification reference.</p></div></div><section className="verification-hero"><div className="verification-hero-icon"><ShieldCheck size={34}/></div><h2>Verify an educational certificate</h2><p>Enter the reference from a QR code or paste its verification URL.</p><form className="verify-form" onSubmit={submit}><div className="search-input"><Search size={18}/><input value={reference} onChange={e=>setReference(e.target.value)} placeholder="Verification ID or QR URL"/></div><button className="primary-button">Verify <ArrowRight size={16}/></button></form>{error&&<div className="error-message">{error}</div>}</section><div className="info-cards"><div className="info-card"><ShieldCheck/><h3>Issuer comparison</h3><p>The demo checks submitted metadata against an authorized record.</p></div><div className="info-card"><Search/><h3>Document integrity</h3><p>A SHA-256 file hash is displayed when the backend has calculated it.</p></div></div></DashboardLayout>;
+}
