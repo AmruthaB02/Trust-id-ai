@@ -50,7 +50,7 @@ def extract_pdf_text(file_obj):
         file_obj.seek(0)
         combined = " ".join(full_text).lower()
         return combined, page_count, True
-    except Exception as e:
+    except Exception:
         try:
             file_obj.seek(0)
         except Exception:
@@ -96,22 +96,13 @@ def calculate_dhash_similarity(hash1, hash2):
 
 def verify_document_content(student_file, auth_record, student_name, reg_no, degree, university_name):
     """
-    Performs deep inspection of the uploaded student certificate (Image or PDF)
+    Performs rigorous inspection of the uploaded student certificate (Image or PDF)
     against the official authorized institutional record.
 
-    Checks:
-    1. Cryptographic binary SHA-256 matching (if university attached master file).
-    2. Visual template & structural comparison (if image document).
-    3. Content extraction & metadata verification (if PDF document).
-    4. Format and tamper detection.
-
-    Returns:
-    {
-        "document_verified": bool,
-        "verification_score": int,
-        "document_type": str,
-        "analysis_notes": str
-    }
+    CRITICAL SECURITY RULE:
+    If the university has an official master document on file, any uploaded
+    image or PDF with different visual layout, different content, or altered hash
+    is REJECTED (document_verified = False).
     """
     filename = getattr(student_file, "name", "").lower()
     is_pdf = filename.endswith(".pdf")
@@ -120,94 +111,168 @@ def verify_document_content(student_file, auth_record, student_name, reg_no, deg
     student_file.seek(0)
 
     analysis_points = []
-    verification_score = 70
     document_verified = False
+    verification_score = 0
+    failure_reason = ""
     doc_type = "PDF Document" if is_pdf else "Image Certificate"
 
-    # 1. Master File Cryptographic Match Check (if university uploaded master file)
-    master_hash_match = False
-    if auth_record and getattr(auth_record, "certificate_hash", None):
-        if student_hash.lower() == auth_record.certificate_hash.lower():
-            master_hash_match = True
-            analysis_points.append("Cryptographic Check: 100% exact SHA-256 match with the university master copy.")
-        else:
-            analysis_points.append("Cryptographic Check: File differs from university archive master copy hash.")
+    # Has the university uploaded an authorized master file?
+    has_master_file = bool(auth_record and (getattr(auth_record, "certificate_file", None) or getattr(auth_record, "certificate_hash", None)))
+    master_hash = getattr(auth_record, "certificate_hash", "").strip().lower() if auth_record else ""
 
-    # 2. PDF Content Analysis
-    if is_pdf:
-        doc_type = "PDF Document"
-        pdf_text, pages, ok = extract_pdf_text(student_file)
-        if ok and pdf_text:
-            analysis_points.append(f"Format Check: Valid PDF with {pages} page(s) and readable text stream.")
-            matched_tokens = []
-            if reg_no and reg_no.lower().strip() in pdf_text:
-                matched_tokens.append(f"Registration Number '{reg_no}'")
-            if student_name:
-                name_parts = [p.lower() for p in student_name.split() if len(p) > 2]
-                if any(p in pdf_text for p in name_parts):
-                    matched_tokens.append(f"Student Name '{student_name}'")
-            if degree and any(d.lower() in pdf_text for d in degree.split() if len(d) > 3):
-                matched_tokens.append("Degree Title")
-            if university_name and any(u.lower() in pdf_text for u in university_name.split() if len(u) > 3):
-                matched_tokens.append("University Header")
-
-            if matched_tokens:
-                document_verified = True
-                verification_score = 100 if master_hash_match else 98
-                analysis_points.append(f"Content Analysis: Extracted text confirms presence of {', '.join(matched_tokens)}.")
-            else:
-                document_verified = master_hash_match or True
-                verification_score = 90
-                analysis_points.append("Content Analysis: PDF structure is valid. Text elements verified against institutional registry.")
-        else:
-            analysis_points.append("Format Check: Scanned or image-based PDF document detected. Validated file structure.")
+    # =========================================================================
+    # SCENARIO A: University HAS an Official Master Document on Record
+    # =========================================================================
+    if has_master_file:
+        # 1. Exact Binary SHA-256 Checksum Match
+        if master_hash and student_hash.lower() == master_hash:
             document_verified = True
-            verification_score = 100 if master_hash_match else 92
-    else:
-        # 3. Image Visual & Structural Analysis
-        try:
-            student_file.seek(0)
-            img = Image.open(student_file)
-            img.verify()
-            student_file.seek(0)
-            img = Image.open(student_file)
-            width, height = img.size
-            img_format = img.format or "IMAGE"
-            doc_type = f"{img_format} Image ({width}x{height}px)"
-            analysis_points.append(f"Format Check: Valid {img_format} graphic certificate ({width}x{height} pixels).")
-
-            dhash = compute_image_dhash(img)
-
-            # Compare visual similarity if university master certificate is also an image
-            if auth_record and getattr(auth_record, "certificate_file", None):
+            verification_score = 100
+            analysis_points.append("Cryptographic Check: 100% exact SHA-256 match with the university master copy.")
+            analysis_points.append("Document Authenticity: Perfect bit-level match confirmed.")
+        else:
+            # File hash differs! We must perform deep image or PDF comparison
+            if not is_pdf:
+                # Student uploaded an image
                 try:
-                    auth_record.certificate_file.seek(0)
-                    master_img = Image.open(auth_record.certificate_file)
-                    master_dhash = compute_image_dhash(master_img)
-                    auth_record.certificate_file.seek(0)
-                    if master_dhash and dhash:
-                        similarity = calculate_dhash_similarity(dhash, master_dhash)
-                        analysis_points.append(f"Visual Template Match: {similarity}% perceptual visual similarity with university issuer master.")
-                        if similarity >= 85:
-                            verification_score = 100
+                    student_file.seek(0)
+                    img = Image.open(student_file)
+                    img.verify()
+                    student_file.seek(0)
+                    img = Image.open(student_file)
+                    w, h = img.size
+                    doc_type = f"{img.format or 'IMAGE'} ({w}x{h}px)"
+                    analysis_points.append(f"Format Check: Valid graphic certificate ({w}x{h} pixels).")
+
+                    student_dhash = compute_image_dhash(img)
+
+                    # Check if master is also an image
+                    master_file_obj = getattr(auth_record, "certificate_file", None)
+                    if master_file_obj:
+                        try:
+                            master_file_obj.seek(0)
+                            master_img = Image.open(master_file_obj)
+                            master_dhash = compute_image_dhash(master_img)
+                            master_file_obj.seek(0)
+
+                            similarity = calculate_dhash_similarity(student_dhash, master_dhash)
+                            analysis_points.append(f"Visual Template Match: {similarity}% visual similarity against university master.")
+
+                            if similarity >= 90.0:
+                                document_verified = True
+                                verification_score = int(similarity)
+                                analysis_points.append("Visual Analysis: Image layout and pixel structure match authorized certificate.")
+                            else:
+                                document_verified = False
+                                verification_score = max(10, int(similarity))
+                                failure_reason = f"Visual similarity is only {similarity}% (required: 90% threshold)"
+                                analysis_points.append(f"DOCUMENT MISMATCH: Uploaded image differs visually from university master ({similarity}% similarity).")
+                        except Exception as e:
+                            document_verified = False
+                            verification_score = 30
+                            failure_reason = "Unable to match image against master copy"
+                            analysis_points.append(f"Comparison Error: {str(e)}")
+                    else:
+                        # Master has hash but no file object and hashes differ -> Reject
+                        document_verified = False
+                        verification_score = 25
+                        failure_reason = "SHA-256 hash does not match university master hash"
+                        analysis_points.append("Cryptographic Check: File SHA-256 digest does not match authorized master hash.")
+                except Exception as e:
+                    document_verified = False
+                    verification_score = 15
+                    failure_reason = "Uploaded image file is corrupt or unreadable"
+                    analysis_points.append(f"Image Error: {str(e)}")
+            else:
+                # Student uploaded a PDF, but master hash differs
+                master_file_obj = getattr(auth_record, "certificate_file", None)
+                pdf_text, pages, ok = extract_pdf_text(student_file)
+
+                if master_file_obj and getattr(master_file_obj, "name", "").lower().endswith(".pdf"):
+                    # Both are PDFs -> compare text content
+                    master_text, _, master_ok = extract_pdf_text(master_file_obj)
+                    if ok and master_ok and master_text:
+                        # Check keyword overlap
+                        tokens = [t for t in reg_no.lower().split() if t] + [t for t in student_name.lower().split() if len(t) > 2]
+                        matches = sum(1 for t in tokens if t in pdf_text)
+                        if matches == len(tokens) and len(tokens) > 0:
                             document_verified = True
+                            verification_score = 92
+                            analysis_points.append("PDF Analysis: Extracted text matches authorized university certificate content.")
                         else:
-                            verification_score = max(80, int(similarity))
-                except Exception:
-                    pass
+                            document_verified = False
+                            verification_score = 35
+                            failure_reason = "PDF document text does not match university master certificate"
+                            analysis_points.append("DOCUMENT MISMATCH: Uploaded PDF text does not match authorized university master copy.")
+                    else:
+                        document_verified = False
+                        verification_score = 30
+                        failure_reason = "PDF binary hash differs from university master"
+                        analysis_points.append("Cryptographic Check: PDF binary hash differs from authorized master.")
+                else:
+                    # Master was an image or had a different hash
+                    document_verified = False
+                    verification_score = 25
+                    failure_reason = "Uploaded PDF does not match university master document"
+                    analysis_points.append("DOCUMENT MISMATCH: Uploaded file does not match authorized university archive.")
 
-            if not document_verified:
-                document_verified = True
-                verification_score = 100 if master_hash_match else 95
-                analysis_points.append("Visual Analysis: Image layout, resolution, and header proportions confirmed.")
-        except Exception as e:
-            analysis_points.append(f"Image Warning: Unable to inspect image pixels ({str(e)}).")
-            document_verified = False
-            verification_score = 60
+    # =========================================================================
+    # SCENARIO B: University Only Registered Text Records (No Master File Uploaded)
+    # =========================================================================
+    else:
+        if is_pdf:
+            doc_type = "PDF Document"
+            pdf_text, pages, ok = extract_pdf_text(student_file)
+            if ok and pdf_text:
+                analysis_points.append(f"Format Check: Valid PDF with {pages} page(s).")
+                matched_tokens = []
+                if reg_no and reg_no.lower().strip() in pdf_text:
+                    matched_tokens.append(f"Roll No '{reg_no}'")
+                if student_name:
+                    name_parts = [p.lower() for p in student_name.split() if len(p) > 2]
+                    if any(p in pdf_text for p in name_parts):
+                        matched_tokens.append(f"Name '{student_name}'")
 
-    if master_hash_match:
-        document_verified = True
-        verification_score = 100
+                # Both roll number AND name must be present in the PDF!
+                if matched_tokens and (reg_no.lower().strip() in pdf_text):
+                    document_verified = True
+                    verification_score = 95
+                    analysis_points.append(f"Content Analysis: Extracted text confirms {', '.join(matched_tokens)}.")
+                else:
+                    document_verified = False
+                    verification_score = 30
+                    failure_reason = f"PDF text does not contain roll number '{reg_no}' or student name '{student_name}'"
+                    analysis_points.append(f"DOCUMENT REJECTED: Uploaded PDF does not contain registration number '{reg_no}' or name '{student_name}'.")
+            else:
+                document_verified = False
+                verification_score = 20
+                failure_reason = "Uploaded PDF is empty or has no readable text stream"
+                analysis_points.append("DOCUMENT REJECTED: PDF has no readable text stream matching student records.")
+        else:
+            try:
+                student_file.seek(0)
+                img = Image.open(student_file)
+                img.verify()
+                student_file.seek(0)
+                img = Image.open(student_file)
+                w, h = img.size
+                doc_type = f"{img.format or 'IMAGE'} ({w}x{h}px)"
+
+                if w < 300 or h < 200:
+                    document_verified = False
+                    verification_score = 25
+                    failure_reason = f"Image resolution ({w}x{h}) is too low to be a valid certificate"
+                    analysis_points.append(f"DOCUMENT REJECTED: Low resolution ({w}x{h}px).")
+                else:
+                    # Valid image structure when no master file is registered to compare against
+                    document_verified = True
+                    verification_score = 90
+                    analysis_points.append(f"Format Check: Valid {doc_type} certificate image. Structure validated.")
+            except Exception as e:
+                document_verified = False
+                verification_score = 20
+                failure_reason = "Corrupt or invalid image file"
+                analysis_points.append(f"DOCUMENT REJECTED: Corrupt image ({str(e)}).")
 
     analysis_points.append(f"SHA-256 Digest: {student_hash[:16]}...{student_hash[-12:]}")
 
@@ -215,5 +280,6 @@ def verify_document_content(student_file, auth_record, student_name, reg_no, deg
         "document_verified": document_verified,
         "verification_score": verification_score,
         "document_type": doc_type,
+        "failure_reason": failure_reason,
         "analysis_notes": "\n".join(analysis_points)
     }

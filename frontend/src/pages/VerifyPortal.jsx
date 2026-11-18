@@ -13,7 +13,8 @@ import {
   Fingerprint,
   ExternalLink,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  X
 } from "lucide-react";
 import DashboardLayout from "../components/DashboardLayout";
 import api, { getList, getErrorMessage } from "../services/api";
@@ -207,17 +208,23 @@ export default function VerifyPortal({ user }) {
               )}
               <div>
                 <h2 style={{ margin: 0, fontSize: "18px" }}>
-                  {isVerified ? "Credential Authenticated & Verified" : "Record Match Not Found"}
+                  {isVerified
+                    ? "Credential Authenticated & Verified"
+                    : record.document_verified === false
+                    ? "Document Tamper / Mismatch Detected"
+                    : "Record Match Not Found"}
                 </h2>
                 <p style={{ margin: "4px 0 0" }}>
                   {isVerified
                     ? "Cryptographic cross-match confirmed against official university administrative records."
+                    : record.document_verified === false
+                    ? "While metadata matched an institutional record, the uploaded document failed visual and cryptographic inspection against the university master copy."
                     : "No matching authorized institutional record was found for this submission."}
                 </p>
               </div>
             </div>
             <span className={`status-pill ${isVerified ? "success" : "danger"}`}>
-              {isVerified ? "Verified Credential" : "Unverified Credential"}
+              {isVerified ? "Verified Credential" : record.document_verified === false ? "Document Mismatch / Tamper" : "Unverified Credential"}
             </span>
           </div>
 
@@ -225,10 +232,15 @@ export default function VerifyPortal({ user }) {
           <div style={{ background: "#f8f9ff", border: "1px solid #e1deef", borderRadius: "12px", padding: "16px", margin: "20px 0" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
               <strong style={{ fontSize: "13px", color: "var(--primary-dark)", display: "flex", alignItems: "center", gap: "6px" }}>
-                <ShieldCheck size={17} color="var(--success)" /> Dual-Layer Verification (Text + Image/PDF)
+                {isVerified ? (
+                  <ShieldCheck size={17} color="var(--success)" />
+                ) : (
+                  <ShieldAlert size={17} color="var(--danger)" />
+                )}
+                Dual-Layer Verification (Text + Image/PDF)
               </strong>
-              <span className="status-pill success" style={{ fontSize: "10px", fontWeight: 700 }}>
-                {record.verification_score ? `${record.verification_score}% Integrity Score` : "100% Score"}
+              <span className={`status-pill ${isVerified ? "success" : "danger"}`} style={{ fontSize: "10px", fontWeight: 700 }}>
+                {record.verification_score ? `${record.verification_score}% Integrity Score` : isVerified ? "100% Score" : "0% Score"}
               </span>
             </div>
 
@@ -243,13 +255,14 @@ export default function VerifyPortal({ user }) {
               </div>
 
               <div style={{ background: "#ffffff", border: "1px solid #e7e5f5", borderRadius: "8px", padding: "8px 10px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "11px", fontWeight: 700, color: record.document_verified ? "var(--success)" : "var(--primary)" }}>
-                  <Check size={13} /> Layer 2: Image & PDF Content Check
+                <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "11px", fontWeight: 700, color: record.document_verified ? "var(--success)" : "var(--danger)" }}>
+                  {record.document_verified ? <Check size={13} /> : <X size={13} />}
+                  Layer 2: Image & PDF Content Check
                 </div>
                 <p style={{ margin: "3px 0 0", fontSize: "10px", color: "var(--muted)", lineHeight: 1.4 }}>
                   {record.document_verified
                     ? "Cryptographic SHA-256 hash, visual pixels, and PDF content streams validated."
-                    : "Document format inspected."}
+                    : "Document rejected: file differs visually or cryptographically from university master copy."}
                 </p>
               </div>
             </div>

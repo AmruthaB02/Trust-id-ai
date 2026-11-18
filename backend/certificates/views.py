@@ -114,18 +114,26 @@ class CertificateListCreateView(generics.ListCreateAPIView):
         submission.verification_score = doc_result["verification_score"]
         submission.document_analysis = doc_result["analysis_notes"]
 
-        if matched_record:
+        if matched_record and doc_result["document_verified"]:
             if not submission.marks and matched_record.marks:
                 submission.marks = matched_record.marks
             submission.status = "verified_demo"
             submission.review_note = (
-                f"Dual-Layer Check Passed: Metadata matched institutional record and {doc_result['document_type']} "
-                f"was cryptographically inspected & verified (Score: {doc_result['verification_score']}%)."
+                f"Dual-Layer Verification Passed: Metadata matched institutional records and {doc_result['document_type']} "
+                f"was cryptographically authenticated (Score: {doc_result['verification_score']}%)."
             )
             submission.qr_code.save(
                 f"verification-{submission.reference}.png",
                 create_qr_image(submission.reference),
                 save=False,
+            )
+        elif matched_record and not doc_result["document_verified"]:
+            # Critical Security Protection: Text matched, but the uploaded document/image was different or altered!
+            submission.status = "unverified"
+            submission.review_note = (
+                f"DOCUMENT REJECTED / MISMATCH: While text metadata matched an authorized record, the uploaded {doc_result['document_type']} "
+                f"failed verification ({doc_result.get('failure_reason', 'Uploaded document differs from authorized master copy')}). "
+                f"Integrity Score: {doc_result['verification_score']}%. Administrator review is required."
             )
         else:
             submission.status = "unverified"

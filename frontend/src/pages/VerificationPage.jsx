@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ShieldCheck, ShieldAlert, ArrowLeft, FileText, Printer, Copy, Check, CheckCircle2 } from "lucide-react";
+import { ShieldCheck, ShieldAlert, ArrowLeft, FileText, Printer, Copy, Check, CheckCircle2, AlertTriangle, X } from "lucide-react";
 import api, { getErrorMessage } from "../services/api";
 
 export default function VerificationPage() {
@@ -67,14 +67,20 @@ export default function VerificationPage() {
               )}
             </div>
             <span className={`status-pill ${verified ? "success" : "danger"}`} style={{ marginTop: "10px" }}>
-              {verified ? "Verified Credential" : "Unverified Credential"}
+              {verified ? "Verified Credential" : record.document_verified === false ? "Document Mismatch / Tamper" : "Unverified Credential"}
             </span>
             <h1 style={{ marginTop: "12px", marginBottom: "8px" }}>
-              {verified ? "Credential Authenticated" : "Record Match Not Found"}
+              {verified
+                ? "Credential Authenticated"
+                : record.document_verified === false
+                ? "Document Tamper / Mismatch Detected"
+                : "Record Match Not Found"}
             </h1>
             <p className="verification-description">
               {verified
                 ? "The entered certificate metadata and document pixels/text successfully matched an authorized institutional record in the TrustID network."
+                : record.document_verified === false
+                ? "While the text metadata matched an authorized institutional record, the uploaded document/image failed visual and cryptographic inspection against the university master copy."
                 : "No matching authorized institutional record was found in the verification registry for the provided credentials."}
             </p>
 
@@ -82,10 +88,15 @@ export default function VerificationPage() {
             <div style={{ background: "#f8f9ff", border: "1px solid #e1deef", borderRadius: "12px", padding: "16px", margin: "20px 0", textAlign: "left" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
                 <strong style={{ fontSize: "13px", color: "var(--primary-dark)", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <ShieldCheck size={17} color="var(--success)" /> Dual-Layer Verification (Text + Image/PDF)
+                  {verified ? (
+                    <ShieldCheck size={17} color="var(--success)" />
+                  ) : (
+                    <ShieldAlert size={17} color="var(--danger)" />
+                  )}
+                  Dual-Layer Verification (Text + Image/PDF)
                 </strong>
-                <span className="status-pill success" style={{ fontSize: "10px", fontWeight: 700 }}>
-                  {record.verification_score ? `${record.verification_score}% Integrity Score` : "100% Score"}
+                <span className={`status-pill ${verified ? "success" : "danger"}`} style={{ fontSize: "10px", fontWeight: 700 }}>
+                  {record.verification_score ? `${record.verification_score}% Integrity Score` : verified ? "100% Score" : "0% Score"}
                 </span>
               </div>
 
@@ -100,13 +111,14 @@ export default function VerificationPage() {
                 </div>
 
                 <div style={{ background: "#ffffff", border: "1px solid #e7e5f5", borderRadius: "8px", padding: "8px 10px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "11px", fontWeight: 700, color: record.document_verified ? "var(--success)" : "var(--primary)" }}>
-                    <Check size={13} /> Layer 2: Image & PDF Content Check
+                  <div style={{ display: "flex", alignItems: "center", gap: "5px", fontSize: "11px", fontWeight: 700, color: record.document_verified ? "var(--success)" : "var(--danger)" }}>
+                    {record.document_verified ? <Check size={13} /> : <X size={13} />}
+                    Layer 2: Image & PDF Content Check
                   </div>
                   <p style={{ margin: "3px 0 0", fontSize: "10px", color: "var(--muted)", lineHeight: 1.4 }}>
                     {record.document_verified
                       ? "Cryptographic SHA-256 hash, visual pixels, and PDF content streams validated."
-                      : "Document format inspected."}
+                      : "Document rejected: file differs visually or cryptographically from university master copy."}
                   </p>
                 </div>
               </div>
